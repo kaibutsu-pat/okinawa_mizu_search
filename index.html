@@ -1,0 +1,410 @@
+﻿<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    
+    <!-- X (Twitter) シェア用設定 -->
+    <meta name="twitter:card" content="summary" />
+    <meta property="og:title" content="沖縄県 水源・断水リスク判定くん" />
+    <meta property="og:description" content="あなたの地域の断水リスクは？住所（字・町名）から配水系統を簡易判定します。※非公式ツールです。" />
+    <meta property="og:type" content="website" />
+    
+    <title>沖縄県 水源・断水リスク判定くん</title>
+    <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+    <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;700;900&display=swap');
+        body { font-family: 'Noto Sans JP', sans-serif; background-color: #f0f9ff; }
+        .slide-down { animation: slideDown 0.3s ease-out forwards; }
+        @keyframes slideDown { from { opacity: 0; transform: translateY(-10px); } to { opacity: 1; transform: translateY(0); } }
+        .pulse-warning { animation: pulseWarning 2s infinite; }
+        @keyframes pulseWarning { 
+            0% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.4); }
+            70% { box-shadow: 0 0 0 10px rgba(239, 68, 68, 0); }
+            100% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0); }
+        }
+    </style>
+    <script src="https://unpkg.com/lucide@latest"></script>
+</head>
+<body>
+    <div id="root"></div>
+
+    <script type="text/babel">
+        const { useState, useEffect } = React;
+
+        // ==========================================
+        // 1. 那覇市 詳細データ
+        // ==========================================
+        const NAHA_TOWNS = [
+            // --- 西原浄水場系 (ピンク色・リスクエリア) ---
+            { name: "小禄 (おろく) 1～5丁目", plant: "西原浄水場", desc: "上間・豊見城配水池（西原系）の系統です。", type: "nishihara" },
+            { name: "金城 (かなぐすく) 1～5丁目", plant: "西原浄水場", desc: "宇栄原配水池（西原系扱い）等の系統と考えられます。", type: "nishihara" },
+            { name: "宇栄原 (うえはら) 1～6丁目", plant: "西原浄水場", desc: "豊見城配水池（西原系）等の系統です。", type: "nishihara" },
+            { name: "赤嶺 (あかみね) 1～2丁目", plant: "西原浄水場", desc: "赤嶺配水池は西原系統に分類されています。", type: "nishihara" },
+            { name: "高良 (たから) 1～3丁目", plant: "西原浄水場", desc: "豊見城配水池（西原系）の系統です。", type: "nishihara" },
+            { name: "田原 (たばる) 1～4丁目", plant: "西原浄水場", desc: "上間・赤嶺配水池（西原系）の系統です。", type: "nishihara" },
+            { name: "具志 (ぐし) 1～3丁目", plant: "西原浄水場", desc: "上間・豊見城配水池（西原系）の系統です。", type: "nishihara" },
+            { name: "鏡水 (かがみず)", plant: "西原浄水場", desc: "上間配水池（西原系）の系統です。", type: "nishihara" },
+            { name: "安次嶺 (あしみね)", plant: "西原浄水場", desc: "上間・赤嶺配水池（西原系）の系統です。", type: "nishihara" },
+            { name: "山下町 (やましたちょう)", plant: "西原浄水場", desc: "上間配水池（西原系）の系統です。", type: "nishihara" },
+            { name: "垣花町 (かきのはなちょう)", plant: "西原浄水場", desc: "上間配水池（西原系）の系統です。", type: "nishihara" },
+            { name: "鏡原町 (きょうはらちょう)", plant: "西原浄水場", desc: "上間配水池（西原系）の系統です。", type: "nishihara" },
+            
+            // 那覇南部・中央部 (西原系)
+            { name: "壺川 (つぼがわ) 1～3丁目", plant: "西原浄水場", desc: "上間配水池（西原系）の系統です。", type: "nishihara" },
+            { name: "古波蔵 (こはぐら) 1～4丁目", plant: "西原浄水場", desc: "上間配水池（西原系）の系統です。", type: "nishihara" },
+            { name: "与儀 (よぎ) 1～2丁目", plant: "西原浄水場", desc: "上間配水池（西原系）の系統です。", type: "nishihara" },
+            { name: "寄宮 (よりみや) 1～3丁目", plant: "西原浄水場", desc: "上間配水池（西原系）の系統です。", type: "nishihara" },
+            { name: "国場 (こくば)", plant: "西原浄水場", desc: "上間・識名配水池（西原系）の系統です。", type: "nishihara" },
+            { name: "仲井真 (なかいま)", plant: "西原浄水場", desc: "上間・識名配水池（西原系）の系統です。", type: "nishihara" },
+            { name: "長田 (ながた) 1～2丁目", plant: "西原浄水場", desc: "上間・識名配水池（西原系）の系統です。", type: "nishihara" },
+            { name: "上間 (うえま)", plant: "西原浄水場", desc: "上間・識名配水池（西原系）の系統です。", type: "nishihara" },
+            { name: "識名 (しきな) 1～4丁目", plant: "西原浄水場", desc: "上間配水池（西原系）の系統です。", type: "nishihara" },
+            { name: "繁多川 (はんたがわ) 1～5丁目", plant: "西原浄水場", desc: "前田・上間配水池（西原系）の系統です。", type: "nishihara" },
+            { name: "三原 (みはら) 2～3丁目", plant: "西原浄水場", desc: "上間配水池（西原系）の系統です。", type: "nishihara" },
+            { name: "松川 (まつがわ) 1～3丁目", plant: "西原浄水場", desc: "上間配水池（西原系）の系統です。", type: "nishihara" },
+            
+            // 首里エリア (西原系)
+            { name: "首里エリア (全域)", plant: "西原浄水場", desc: "首里地区（当蔵、鳥堀、崎山、赤田等）は全域が西原浄水場系です。", type: "nishihara" },
+            { name: "真嘉比 (まかび) 3丁目", plant: "西原浄水場", desc: "3丁目は前田配水池（西原系）の系統です。", type: "nishihara" },
+
+            // --- 北谷浄水場系 (青色・安全エリア) ---
+            { name: "おもろまち 1～4丁目", plant: "北谷浄水場", desc: "上之屋・安里配水池（北谷系）のため、影響は低い見通しです。", type: "chatan" },
+            { name: "銘苅 (めかる) 1～3丁目", plant: "北谷浄水場", desc: "安謝・上之屋配水池（北谷系）のため、影響は低い見通しです。", type: "chatan" },
+            { name: "安謝 (あじゃ) 1～2丁目", plant: "北谷浄水場", desc: "安謝・上之屋配水池（北谷系）のため、影響は低い見通しです。", type: "chatan" },
+            { name: "天久 (あめく) 1～2丁目", plant: "北谷浄水場", desc: "上之屋配水池（北谷系）のため、影響は低い見通しです。", type: "chatan" },
+            { name: "曙 (あけぼの) 1～3丁目", plant: "北谷浄水場", desc: "泊配水池（北谷系）のため、影響は低い見通しです。", type: "chatan" },
+            { name: "港町 (みなとまち) 1～4丁目", plant: "北谷浄水場", desc: "泊配水池（北谷系）のため、影響は低い見通しです。", type: "chatan" },
+            { name: "若狭 (わかさ) 1～3丁目", plant: "北谷浄水場", desc: "泊配水池（北谷系）のため、影響は低い見通しです。", type: "chatan" },
+            { name: "辻 (つじ) 1～3丁目", plant: "北谷浄水場", desc: "泊配水池（北谷系）のため、影響は低い見通しです。", type: "chatan" },
+            { name: "久米 (くめ) 1～2丁目", plant: "北谷浄水場", desc: "泊配水池（北谷系）のため、影響は低い見通しです。", type: "chatan" },
+            { name: "松山 (まつやま) 1～2丁目", plant: "北谷浄水場", desc: "泊配水池（北谷系）のため、影響は低い見通しです。", type: "chatan" },
+            { name: "前島 (まえじま) 1～3丁目", plant: "北谷浄水場", desc: "泊配水池（北谷系）のため、影響は低い見通しです。", type: "chatan" },
+            { name: "牧志 (まきし) 1～3丁目", plant: "北谷浄水場", desc: "泊・安里配水池（北谷系）のため、影響は低い見通しです。", type: "chatan" },
+            { name: "安里 (あさと) 1～2丁目", plant: "北谷浄水場", desc: "泊・安里配水池（北谷系）のため、影響は低い見通しです。", type: "chatan" },
+            { name: "壺屋 (つぼや) 1～2丁目", plant: "北谷浄水場", desc: "安里配水池（北谷系）のため、影響は低い見通しです。", type: "chatan" },
+            { name: "泉崎 (いずみざき) 1丁目", plant: "北谷浄水場", desc: "1丁目は泊配水池（北谷系）のため、影響は低い見通しです。", type: "chatan" },
+            { name: "奥武山町 (おうのやま)", plant: "北谷浄水場", desc: "泊配水池（北谷系）のため、影響は低い見通しです。", type: "chatan" },
+            { name: "真嘉比 (まかび) 1～2丁目", plant: "北谷浄水場", desc: "1-2丁目は大名配水池（北谷系）のため、影響は低い見通しです。", type: "chatan" },
+            { name: "古島 (ふるじま) 1丁目", plant: "北谷浄水場", desc: "1丁目は大名配水池（北谷系）のため、影響は低い見通しです。", type: "chatan" },
+            { name: "三原 (みはら) 1丁目", plant: "北谷浄水場", desc: "1丁目は安里配水池（北谷系）のため、影響は低い見通しです。", type: "chatan" },
+            { name: "大道 (だいどう)", plant: "北谷浄水場", desc: "大名・安里配水池（北谷系）のため、影響は低い見通しです。", type: "chatan" },
+
+            // --- 混合・要注意 (黄色) ---
+            { name: "泉崎 (いずみざき) 2丁目", plant: "西原浄水場", desc: "2丁目は上間配水池（西原系）のため、注意が必要です。", type: "high" },
+            { name: "松尾 (まつお) 2丁目", plant: "混合エリア", desc: "「上間・大名・前田・安里」の混合エリアです。西原系の水が含まれるため注意が必要です。", type: "mixed" },
+            { name: "古島 (ふるじま) 2丁目", plant: "混合エリア", desc: "「大名・前田」の混合エリアです。西原系の水が含まれるため注意が必要です。", type: "mixed" },
+            { name: "樋川 (ひがわ) 1丁目", plant: "混合エリア", desc: "「上間・安里」の混合エリアです。西原系の水が含まれるため注意が必要です。", type: "mixed" },
+        ];
+
+        // ==========================================
+        // 2. 沖縄市 詳細データ
+        // ==========================================
+        const OKINAWA_CITY_TOWNS = [
+            // 北谷系
+            { name: "美里・宮里・越来", plant: "北谷浄水場", desc: "マップ上では北谷浄水場エリアに含まれるため、影響は低いと考えられます。", type: "chatan" },
+            { name: "城前・住吉・八重島", plant: "北谷浄水場", desc: "マップ上では北谷浄水場エリアに含まれるため、影響は低いと考えられます。", type: "chatan" },
+            { name: "白川・倉敷・胡屋", plant: "北谷浄水場", desc: "マップ上では北谷浄水場エリアに含まれるため、影響は低いと考えられます。", type: "chatan" },
+            { name: "園田・山内・南桃原", plant: "北谷浄水場", desc: "マップ上では北谷浄水場エリアに含まれるため、影響は低いと考えられます。", type: "chatan" },
+            { name: "山里・諸見里・久保田", plant: "北谷浄水場", desc: "マップ上では北谷浄水場エリアに含まれるため、影響は低いと考えられます。", type: "chatan" },
+            { name: "嘉間良・上地・仲宗根町", plant: "北谷浄水場", desc: "マップ上では北谷浄水場エリアに含まれるため、影響は低いと考えられます。", type: "chatan" },
+            { name: "中央 (ちゅうおう)", plant: "北谷浄水場", desc: "マップ上では北谷浄水場エリアに含まれるため、影響は低いと考えられます。", type: "chatan" },
+
+            // 石川系 (リスク対象)
+            { name: "池原・知花・松本", plant: "石川浄水場", desc: "マップ上で「石川浄水場の水」エリアに含まれるため、断水リスクがあります。", type: "high" },
+            { name: "登川・高原・比屋根", plant: "石川浄水場", desc: "マップ上で「石川浄水場の水」エリアに含まれるため、断水リスクがあります。", type: "high" },
+            { name: "与儀・泡瀬・大里", plant: "石川浄水場", desc: "マップ上で「石川浄水場の水」エリアに含まれるため、断水リスクがあります。", type: "high" },
+            { name: "東・古謝・海邦", plant: "石川浄水場", desc: "マップ上で「石川浄水場の水」エリアに含まれるため、断水リスクがあります。", type: "high" },
+            { name: "桃原 (とうばる)", plant: "石川浄水場", desc: "マップの境界線付近ですが、石川浄水場エリアに含まれる可能性が高いため、警戒が必要です。", type: "high" },
+        ];
+        
+        // 浦添市
+        const URASOE_TOWNS = [
+            { name: "牧港・城間・屋富祖", plant: "北谷浄水場", desc: "北谷浄水場系のため、影響は低いと考えられます。", type: "chatan" },
+            { name: "宮城・港川・勢理客", plant: "北谷浄水場", desc: "北谷浄水場系のため、影響は低いと考えられます。", type: "chatan" },
+            { name: "前田・経塚・当山", plant: "西原浄水場", desc: "西原浄水場系のため、影響を受ける可能性があります。", type: "nishihara" },
+            { name: "西原・仲間・伊祖", plant: "西原浄水場", desc: "西原浄水場系のため、影響を受ける可能性があります。", type: "nishihara" }
+        ];
+
+        // ==========================================
+        // 3. 市町村データ
+        // ==========================================
+        const MUNICIPALITY_BASE = {
+            "沖縄市": { plant: "判定中...", type: "complex", list: OKINAWA_CITY_TOWNS },
+            "那覇市": { plant: "判定中...", type: "complex", list: NAHA_TOWNS },
+            "浦添市": { plant: "判定中...", type: "complex", list: URASOE_TOWNS },
+            
+            // 西原系 (高リスク)
+            "糸満市": { plant: "西原浄水場", type: "single", risk: "high", note: "資料によると西原浄水場（および石川浄水場からの送水）が水源です。断水リスクが高いエリアです。" },
+            "豊見城市": { plant: "西原浄水場", type: "single", risk: "high", note: "資料によると西原浄水場（および石川浄水場からの送水）が水源です。断水リスクが高いエリアです。" },
+            "西原町": { plant: "西原浄水場", type: "single", risk: "high", note: "西原浄水場からの受水エリアです。影響を受ける可能性があります。" },
+            "南城市": { plant: "西原浄水場", type: "single", risk: "high", note: "西原浄水場からの受水エリアです。影響を受ける可能性があります。" },
+            "与那原町": { plant: "西原浄水場", type: "single", risk: "high", note: "西原浄水場からの受水エリアです。影響を受ける可能性があります。" },
+            "南風原町": { plant: "西原浄水場", type: "single", risk: "high", note: "西原浄水場からの受水エリアです。影響を受ける可能性があります。" },
+            "八重瀬町": { plant: "西原浄水場", type: "single", risk: "high", note: "西原浄水場からの受水エリアです。影響を受ける可能性があります。" },
+
+            // 石川系 (高リスク)
+            "うるま市": { plant: "石川浄水場", type: "mixed_simple", risk: "high", note: "石川浄水場がメインのため、影響を受ける可能性があります。" },
+            "読谷村": { plant: "石川浄水場", type: "mixed_simple", risk: "high", note: "石川浄水場がメインのため、影響を受ける可能性があります。" },
+            "恩納村": { plant: "石川浄水場", type: "single", risk: "high", note: "石川浄水場からの受水エリアです（報道によると南部で断水可能性あり）。" },
+            "嘉手納町": { plant: "石川浄水場", type: "mixed_simple", risk: "high", note: "石川浄水場からの受水が含まれるため、影響を受ける可能性があります。" },
+            "金武町": { plant: "石川浄水場", type: "mixed_simple", risk: "high", note: "石川浄水場からの受水が含まれるため、影響を受ける可能性があります。" },
+
+            // 北谷系 (低リスク)
+            "北谷町": { plant: "北谷浄水場", type: "single", risk: "low", note: "北谷浄水場系のため、影響は低いと考えられます。" },
+            "宜野湾市": { plant: "北谷浄水場", type: "single", risk: "low", note: "北谷浄水場系のため、影響は低いと考えられます。" },
+
+            // 安全
+            "名護市": { plant: "名護浄水場", type: "single", risk: "safe", note: "報道によると「断水しない」ことが確認されています。" },
+            "本部町": { plant: "名護浄水場", type: "single", risk: "low", note: "名護浄水場系のため、影響は低いと考えられます。" },
+            "宮古島市": { plant: "自己水源", type: "self", risk: "safe", note: "影響ありません。" },
+            "石垣市": { plant: "自己水源", type: "self", risk: "safe", note: "影響ありません。" },
+        };
+
+        const App = () => {
+            const [selectedCity, setSelectedCity] = useState("");
+            const [selectedTownInfo, setSelectedTownInfo] = useState(null);
+            const [result, setResult] = useState(null);
+
+            const cities = Object.keys(MUNICIPALITY_BASE);
+
+            // リセット処理
+            useEffect(() => {
+                setResult(null);
+                setSelectedTownInfo(null);
+            }, [selectedCity]);
+
+            // 判定ロジック
+            useEffect(() => {
+                if (!selectedCity) return;
+
+                const baseInfo = MUNICIPALITY_BASE[selectedCity];
+
+                // 1. シンプルな自治体（即決）
+                if (baseInfo.type !== "complex") {
+                    setResult({
+                        plant: baseInfo.plant,
+                        desc: baseInfo.note,
+                        risk: baseInfo.risk,
+                        status: "confirmed"
+                    });
+                    return;
+                }
+
+                // 2. 複雑な自治体
+                if (baseInfo.type === "complex") {
+                    if (selectedTownInfo) {
+                        // 町名判定
+                        let riskLevel = "warning";
+                        if (selectedTownInfo.type === "high") riskLevel = "high";
+                        if (selectedTownInfo.type === "nishihara") riskLevel = "high";
+                        if (selectedTownInfo.type === "chatan") riskLevel = "low";
+                        if (selectedTownInfo.type === "safe") riskLevel = "safe";
+                        if (selectedTownInfo.type === "mixed") riskLevel = "warning";
+                        
+                        setResult({
+                            plant: selectedTownInfo.plant,
+                            desc: selectedTownInfo.desc,
+                            risk: riskLevel,
+                            status: "confirmed"
+                        });
+                    } else {
+                        // 待機中
+                        setResult({ status: "waiting" });
+                    }
+                }
+            }, [selectedCity, selectedTownInfo]);
+
+            // リスクごとのUI設定
+            const getRiskUI = (risk) => {
+                switch(risk) {
+                    case "high":
+                        return {
+                            icon: "alert-triangle",
+                            color: "bg-red-500",
+                            textColor: "text-red-700",
+                            bgColor: "bg-red-50",
+                            borderColor: "border-red-200",
+                            title: "断水リスク：高",
+                            message: "今回のトラブル対象である「石川・西原系統」のエリアです。念のため断水への備えをお勧めします。"
+                        };
+                    case "warning":
+                    case "mixed":
+                        return {
+                            icon: "alert-circle",
+                            color: "bg-yellow-500",
+                            textColor: "text-yellow-700",
+                            bgColor: "bg-yellow-50",
+                            borderColor: "border-yellow-200",
+                            title: "一部影響の可能性あり",
+                            message: "西原系と北谷系が混在する地域、または境界付近のエリアです。"
+                        };
+                    case "low":
+                        return {
+                            icon: "check-circle",
+                            color: "bg-blue-500",
+                            textColor: "text-blue-700",
+                            bgColor: "bg-blue-50",
+                            borderColor: "border-blue-200",
+                            title: "断水リスク：低",
+                            message: "影響の出ない「北谷浄水場」または「名護浄水場」が主な水源です。"
+                        };
+                    case "safe":
+                        return {
+                            icon: "shield-check",
+                            color: "bg-green-600",
+                            textColor: "text-green-800",
+                            bgColor: "bg-green-50",
+                            borderColor: "border-green-200",
+                            title: "影響なし (報道・確認済)",
+                            message: "ニュース報道等により「影響が出ない見通し」または「断水しない」ことが確認されています。"
+                        };
+                    default:
+                        return {};
+                }
+            };
+
+            return (
+                <div className="min-h-screen p-4 sm:p-6 flex flex-col items-center max-w-2xl mx-auto">
+                    
+                    {/* Title */}
+                    <div className="text-center mb-6">
+                        <h1 className="text-2xl font-black text-gray-800 flex items-center justify-center gap-2">
+                            <i data-lucide="activity" className="text-red-500 fill-current"></i>
+                            水源・断水リスク判定くん
+                        </h1>
+                        <p className="text-sm text-gray-500 mt-1">「私の家は大丈夫？」を詳細データでチェック</p>
+                    </div>
+
+                    {/* Main Interface */}
+                    <div className="w-full bg-white rounded-3xl shadow-xl overflow-hidden border border-gray-100">
+                        
+                        {/* Step 1: City Selection */}
+                        <div className="p-6 bg-slate-50 border-b border-slate-100">
+                            <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">
+                                1. 市町村を選ぶ
+                            </label>
+                            <div className="relative">
+                                <select 
+                                    value={selectedCity}
+                                    onChange={(e) => setSelectedCity(e.target.value)}
+                                    className="w-full p-4 pl-4 pr-10 rounded-xl border border-gray-300 shadow-sm text-lg font-bold text-gray-800 focus:ring-2 focus:ring-blue-500 outline-none bg-white appearance-none"
+                                >
+                                    <option value="">▼ 選択してください</option>
+                                    {cities.map(c => <option key={c} value={c}>{c}</option>)}
+                                </select>
+                                <i data-lucide="chevron-down" className="absolute right-4 top-5 text-gray-400 pointer-events-none"></i>
+                            </div>
+                        </div>
+
+                        {/* Step 2: Town Selection */}
+                        {selectedCity && MUNICIPALITY_BASE[selectedCity].type === "complex" && (
+                            <div className="p-6 bg-white animate-fade-in border-b border-gray-100">
+                                <label className="block text-xs font-bold text-blue-600 uppercase tracking-wider mb-2 flex items-center">
+                                    2. 町名を選ぶ <span className="ml-2 bg-blue-100 text-blue-700 px-2 py-0.5 rounded-full text-[10px]">詳細判定</span>
+                                </label>
+                                <div className="relative">
+                                    <select 
+                                        value={selectedTownInfo ? selectedTownInfo.name : ""}
+                                        onChange={(e) => {
+                                            const town = MUNICIPALITY_BASE[selectedCity].list.find(t => t.name === e.target.value);
+                                            setSelectedTownInfo(town);
+                                        }}
+                                        className="w-full p-4 pl-4 pr-10 rounded-xl border-2 border-blue-100 focus:border-blue-500 focus:ring-2 focus:ring-blue-200 outline-none text-lg transition-all appearance-none cursor-pointer hover:border-blue-300"
+                                    >
+                                        <option value="">▼ 町名を選択してください</option>
+                                        {MUNICIPALITY_BASE[selectedCity].list.sort((a,b) => a.name.localeCompare(b.name, 'ja')).map(town => (
+                                            <option key={town.name} value={town.name}>
+                                                {town.name}
+                                            </option>
+                                        ))}
+                                    </select>
+                                    <i data-lucide="chevron-down" className="absolute right-4 top-5 text-gray-400 pointer-events-none"></i>
+                                </div>
+                                <p className="text-[10px] text-gray-400 mt-2 ml-1">
+                                    ※公式の詳細資料に基づいています
+                                </p>
+                            </div>
+                        )}
+
+                        {/* Step 3: Result Display */}
+                        {result && result.status !== "waiting" ? (
+                            (() => {
+                                const ui = getRiskUI(result.risk);
+                                return (
+                                    <div className="p-8 text-center slide-down">
+                                        
+                                        {/* Status Badge */}
+                                        <div className={`inline-flex items-center justify-center p-3 rounded-full ${ui.color} text-white mb-4 shadow-lg ${result.risk.includes('high') ? 'pulse-warning' : ''}`}>
+                                            <i data-lucide={ui.icon} className="w-8 h-8"></i>
+                                        </div>
+
+                                        <h2 className={`text-xl font-bold mb-2 ${ui.textColor}`}>
+                                            {ui.title}
+                                        </h2>
+
+                                        <div className="text-2xl sm:text-3xl font-black text-gray-800 mb-6 leading-tight">
+                                            {result.plant}
+                                        </div>
+
+                                        <div className={`p-5 rounded-xl text-left text-sm leading-relaxed border ${ui.bgColor} ${ui.borderColor} ${ui.textColor}`}>
+                                            <div className="font-bold mb-1 flex items-center">
+                                                <i data-lucide="info" className="w-4 h-4 mr-2"></i>
+                                                判定根拠
+                                            </div>
+                                            {ui.message}
+                                            <div className="mt-2 pt-2 border-t border-gray-200/50 opacity-80 text-xs">
+                                                ※ {result.desc}
+                                            </div>
+                                        </div>
+                                        
+                                        {/* Direct Link to News Search */}
+                                        <div className="mt-6">
+                                            <a 
+                                                href="https://www.google.com/search?q=%E6%B2%96%E7%B8%84+%E6%96%AD%E6%B0%B4+%E6%9C%80%E6%96%B0%E6%83%85%E5%A0%B1" 
+                                                target="_blank"
+                                                rel="noopener noreferrer"
+                                                className="inline-flex items-center justify-center w-full px-4 py-3 bg-gray-800 text-white rounded-xl font-bold hover:bg-gray-700 transition-colors"
+                                            >
+                                                <i data-lucide="search" className="w-4 h-4 mr-2"></i>
+                                                最新ニュースを確認する
+                                            </a>
+                                        </div>
+
+                                    </div>
+                                );
+                            })()
+                        ) : (
+                             selectedCity && (
+                                <div className="p-8 text-center text-gray-400 flex flex-col items-center">
+                                    <i data-lucide="arrow-up-circle" className="w-8 h-8 mb-2 opacity-50"></i>
+                                    町名を選択すると判定が表示されます
+                                </div>
+                            )
+                        )}
+                    </div>
+
+                    {/* Disclaimer Footer */}
+                    <div className="mt-6 px-4 pb-4">
+                        <div className="bg-gray-50 rounded-lg p-4 border border-gray-100 text-center">
+                            <p className="text-xs text-gray-500 leading-relaxed mb-2">
+                                ※本アプリは個人が急遽作成した簡易的なものであり、情報が正確でない可能性があります。
+                            </p>
+                            <p className="text-xs text-gray-600 font-bold">
+                                正確な断水状況や給水区域については、必ず各市町村の公式サイトや窓口へお問い合わせください。
+                            </p>
+                        </div>
+                    </div>
+
+                </div>
+            );
+        };
+
+        const root = ReactDOM.createRoot(document.getElementById('root'));
+        root.render(<App />);
+    </script>
+</body>
+</html>
